@@ -2270,6 +2270,7 @@ vr_interface_change(struct vr_interface *vif, vr_interface_req *req)
 
 }
 
+// VIF_TRANSPORT_SOCKET增加的是什么？
 static bool
 vif_transport_valid(vr_interface_req *req)
 {
@@ -2306,16 +2307,14 @@ vr_interface_add(vr_interface_req *req, bool need_response)
     if (!vif_transport_valid(req))
         goto error;
 
+    // 查看本地是否有vif
     vif = __vrouter_get_interface(router, req->vifr_idx);
     if (vif) {
         ret = vr_interface_change(vif, req);
-        /* notify hw offload of change, if enabled */
-        if (!ret)
-            ret = vr_offload_interface_add(vif);
-
         goto generate_resp;
     }
 
+    // 给vif分配内存
     vif = vr_zalloc(sizeof(*vif), VR_INTERFACE_OBJECT);
     if (!vif) {
         ret = -ENOMEM;
@@ -2325,6 +2324,7 @@ vr_interface_add(vr_interface_req *req, bool need_response)
     vif->vif_stats = vr_zalloc(vr_num_cpus *
             sizeof(struct vr_interface_stats), VR_INTERFACE_STATS_OBJECT);
     if (!vif->vif_stats) {
+        /* Out of memory */
         ret = -ENOMEM;
         goto error;
     }
@@ -2383,7 +2383,7 @@ vr_interface_add(vr_interface_req *req, bool need_response)
     if (req->vifr_os_idx == -1)
         vif->vif_os_idx = 0;
     vif->vif_rid = req->vifr_rid;
-    vif->vif_nh_id = req->vifr_nh_id;
+    vif->vif_nh_id = (unsigned short)req->vifr_nh_id;
     vif->vif_qos_map_index = req->vifr_qos_map_index;
     vif->vif_isid = req->vifr_isid;
     if (req->vifr_pbb_mac_size)
@@ -2413,12 +2413,6 @@ vr_interface_add(vr_interface_req *req, bool need_response)
     *ip6 = req->vifr_ip6_u;
     *(ip6 + 1) = req->vifr_ip6_l;
 
-    /* Enable IPv6 underlay if vhost has an IPv6 address */
-    if (vif_is_vhost(vif) && ((*ip6 != 0) || ((*(ip6+1)) != 0))) {
-        vr_printf("Enabling IPv6 underlay in vRouter\n");
-        vr_set_ipv6_underlay_enabled();
-    }
-
     if (req->vifr_name) {
         strncpy(vif->vif_name, req->vifr_name, sizeof(vif->vif_name) - 1);
     }
@@ -2427,7 +2421,6 @@ vr_interface_add(vr_interface_req *req, bool need_response)
         vif->vif_hw_queues = vr_malloc(sizeof(uint16_t) *
                 req->vifr_hw_queues_size, VR_INTERFACE_QUEUE_OBJECT);
         if (!vif->vif_hw_queues) {
-            ret = -ENOMEM;
             goto error;
         }
 
@@ -2465,8 +2458,10 @@ vr_interface_add(vr_interface_req *req, bool need_response)
 
 error:
     if (ret && vif)
+    // 估计是释放内存
         vif_free(vif);
 
+        // 这里本来没有
     /* notify hw offload of change, if enabled */
     if (!ret) {
         ret = vr_offload_interface_add(vif);
@@ -2474,7 +2469,8 @@ error:
             vif_delete(vif);
             vif = NULL;
         }
-    }
+    }   
+
 generate_resp:
     if (need_response)
         vr_send_response(ret);

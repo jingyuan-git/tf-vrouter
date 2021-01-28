@@ -2452,6 +2452,8 @@ static struct notifier_block host_if_nb = {
 void
 vr_host_vif_init(struct vrouter *router)
 {
+    // this is a device used to do receive offload on L2/L3 packets destined over a TAP interface to a VM.
+    // ???
     if (pkt_gro_dev)
         vr_gro_vif_add(router, pkt_gro_dev->ifindex,
                 pkt_gro_dev->name, router->vr_max_interfaces - 1);
